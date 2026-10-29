@@ -1,6 +1,6 @@
 login; nom; groupe_principal; groupes_secondaires
-admin1; Alice Admin; admins; acces_ssh
-admin2; Bob Admin; admins; acces_ssh
+lrivallin; Lorenzo Admin; admins; acces_ssh
+grendu; Gregory Admin; admins; acces_ssh
 support; Compte Support; support; acces_ssh
 cdubois; Camille Dubois; comptables;
 mlefevre; Marc Lefevre; comptables;
