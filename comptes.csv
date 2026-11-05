@@ -1,12 +1,12 @@
-login; nom; groupe_principal; groupes_secondaires
-lrivallin; Lorenzo Admin; admins; acces_ssh
-grendu; Gregory Admin; admins; acces_ssh
-support; Compte Support; support; acces_ssh
-cdubois; Camille Dubois; comptables;
-mlefevre; Marc Lefevre; comptables;
-sleroy; Sophie Leroy; rh;
-proussel; Paul Roussel; rh;
-jlmartin; Jean-Luc Martin; direction;
-emoreau; Emilie Moreau; direction;
-tpetit; Thomas Petit; stagiaire;
-lgarcia; Lucas Garcia; stagiaire;
+login;nom;groupe_principal;groupes_secondaires
+lrivallin;Lorenzo Admin;admins;acces_ssh
+grendu;Gregory Admin;admins;acces_ssh
+support;Compte Support;support;acces_ssh
+cdubois;Camille Dubois;comptables;
+mlefevre;Marc Lefevre;comptables;
+sleroy;Sophie Leroy;rh;
+proussel;Paul Roussel;rh;
+jlmartin;Jean-Luc Martin;direction;
+emoreau;Emilie Moreau;direction;
+tpetit;Thomas Petit;stagiaire;
+lgarcia;Lucas Garcia;stagiaire;
