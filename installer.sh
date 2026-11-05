@@ -47,6 +47,9 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     sudo acl openssh-server nftables fail2ban python3-systemd
 
 etape "2. Comptes, groupes, clés SSH et /srv (C1, C2)"
+FICHIER_MDP=/root/mots_de_passe_initiaux.txt
+lignes_avant=0
+[ -f "$FICHIER_MDP" ] && lignes_avant="$(wc -l < "$FICHIER_MDP")"
 ./creer_comptes.sh
 
 etape "3. sudo et analyse_logs.sh (C3, J4)"
@@ -63,6 +66,9 @@ for f in config/sudoers.d/*; do
 done
 for f in config/sudoers.d/*; do
     install -m 440 -o root -g root "$f" "/etc/sudoers.d/$(basename "$f")"
+done
+for membre in $(getent group sudo | cut -d: -f4 | tr ',' ' '); do
+    gpasswd -d "$membre" sudo
 done
 
 etape "4. Durcissement SSH (S1 à S5)"
@@ -137,5 +143,14 @@ fi
 systemctl enable fail2ban
 systemctl restart fail2ban
 
+admins="$(lignes_csv | awk -F';' '$3 == "admins" {print $1}' | paste -sd '|')"
+nouveaux="$(tail -n +"$((lignes_avant + 1))" "$FICHIER_MDP" 2>/dev/null | grep -E "^($admins):" || true)"
+if [ -n "$nouveaux" ]; then
+    echo
+    echo "=== Identifiants des administrateurs créés (login:mot de passe) ==="
+    echo "$nouveaux"
+    echo "Notez-les maintenant : root est verrouillé, ce sont les seuls comptes avec sudo."
+fi
+
 echo
-echo "=== Séance 4 terminée. Lancez : sudo ./verifier.sh ==="
+echo "=== Installation terminée. Lancez : sudo ./verifier.sh ==="
