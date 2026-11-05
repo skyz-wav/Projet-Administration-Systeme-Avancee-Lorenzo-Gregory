@@ -1,0 +1,7 @@
+[Unit]
+Description=Sauvegarde de /srv et /etc
+RequiresMountsFor=/sauvegardes
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/sauvegarde.sh
