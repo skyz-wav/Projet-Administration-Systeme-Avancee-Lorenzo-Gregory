@@ -189,12 +189,14 @@ find $(findmnt -rn -o TARGET -t ext4,ext3,xfs,btrfs,vfat) -xdev \
     -o -type f -perm -4000 -print -exec chmod u-s {} +
 
 etape "13. Services réseau inutiles (D2)"
+inutiles=()
 for unite in avahi-daemon.socket avahi-daemon.service cups-browsed.service; do
-    if systemctl cat "$unite" >/dev/null 2>&1; then
-        systemctl disable --now "$unite"
-        systemctl mask "$unite"
-    fi
+    if systemctl cat "$unite" >/dev/null 2>&1; then inutiles+=("$unite"); fi
 done
+if [ "${#inutiles[@]}" -gt 0 ]; then
+    systemctl disable "${inutiles[@]}" 2>/dev/null || true
+    systemctl mask --now "${inutiles[@]}" || avertir "Arrêt incomplet de : ${inutiles[*]} (relancez installer.sh)."
+fi
 
 admins="$(lignes_csv | awk -F';' '$3 == "admins" {print $1}' | paste -sd '|')"
 nouveaux="$(tail -n +"$((lignes_avant + 1))" "$FICHIER_MDP" 2>/dev/null | grep -E "^($admins):" || true)"
