@@ -25,6 +25,7 @@ systemctl restart systemd-journald
 echo "=== 3. Durcissement de SSH (Exigence J1) ==="
 # On copie notre configuration SSH personnalisée
 cp config/sshd_chiffres.conf /etc/ssh/sshd_config.d/
+sshd -t
 systemctl restart ssh
 
 echo "=== 4. Configuration du Pare-feu nftables (Exigence J2) ==="
