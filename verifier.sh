@@ -22,7 +22,7 @@ ko() { TOTAL=$((TOTAL + 1)); echo "[KO] $1 $2"; }
 
 controle() {
     local attendu="$1" id="$2" msg="$3" obtenu=non
-    eval "$4" >/dev/null 2>&1 && obtenu=oui
+    ( set +o pipefail; eval "$4" ) >/dev/null 2>&1 && obtenu=oui
     if [ "$obtenu" = "$attendu" ]; then ok "$id" "$msg"; else ko "$id" "$msg"; fi
 }
 
@@ -72,7 +72,9 @@ test_C2() {
     controle non C2 "un stagiaire ne lit pas les fichiers des autres dans depot" \
         "sudo -u $s test -r /srv/commun/depot/$MARQUE.$c"
     controle oui C2 "ACL par défaut présentes sur /srv" \
-        "getfacl -dp /srv/dossiers_clients /srv/rh /srv/commun /srv/commun/depot | grep -q '^default:group:'"
+        "for r in /srv/dossiers_clients /srv/rh /srv/commun /srv/commun/depot; do
+             getfacl -p \$r | grep -q '^default:group:[^:]' || exit 1
+         done"
 }
 
 test_C3() {
