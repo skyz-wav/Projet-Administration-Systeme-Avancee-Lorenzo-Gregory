@@ -53,6 +53,18 @@ creer_compte() {
     fi
 }
 
+installer_cle() {
+    local login="$1" cle="config/ssh/cles_publiques/$1.pub" home groupe
+    [ -f "$cle" ] || return 0
+    home="$(getent passwd "$login" | cut -d: -f6)"
+    groupe="$(id -gn "$login")"
+    install -d -m 700 -o "$login" -g "$groupe" "$home/.ssh"
+    tr -d '\r' < "$cle" > "$home/.ssh/authorized_keys"
+    chown "$login:$groupe" "$home/.ssh/authorized_keys"
+    chmod 600 "$home/.ssh/authorized_keys"
+    echo "  $login : clé SSH installée"
+}
+
 droits_repertoire() {
     local rep="$1" acl="$2"
     install -d -m 0770 -o root -g root "$rep"
@@ -66,6 +78,7 @@ echo "=== Comptes et groupes (C1) ==="
 while IFS=';' read -r login nom principal secondaires || [ -n "$login" ]; do
     [ -z "$login" ] && continue
     creer_compte "$login" "$nom" "$principal" "$secondaires"
+    installer_cle "$login"
 done < <(tail -n +2 "$CSV" | tr -d '\r' | sed 's/ *; */;/g; s/ *, */,/g')
 
 echo "=== Répertoires de /srv (C2) ==="
