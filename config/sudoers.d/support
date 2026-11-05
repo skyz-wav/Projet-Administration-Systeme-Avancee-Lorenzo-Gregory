@@ -1,0 +1,1 @@
+support ALL=(root) NOPASSWD: /usr/local/sbin/analyse_logs.sh "", /usr/local/sbin/analyse_logs.sh ^[0-9]+$
