@@ -36,7 +36,7 @@ systemctl restart nftables
 
 echo "=== 5. Configuration de Fail2ban (Exigence J4) ==="
 # On déploie la prison SSH (jail)
-cp config/sshd.local /etc/fail2ban/jail.d/
+cp config/fail2ban/jail.d/*.confg /etbnc/fail2ban/jail.d/
 systemctl enable --now fail2ban
 systemctl restart fail2ban
 
