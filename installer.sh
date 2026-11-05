@@ -180,10 +180,21 @@ systemctl daemon-reload
 systemctl enable --now sauvegarde.timer
 systemctl start sauvegarde.service
 
-etape "12. Fichiers modifiables par tous (D3)"
+etape "12. Fichiers modifiables par tous et SUID hors /usr (D3)"
 find $(findmnt -rn -o TARGET -t ext4,ext3,xfs,btrfs,vfat) -xdev \
     \( -path /sauvegardes -o -path /tmp -o -path /var/tmp \) -prune \
     -o -type f -perm -0002 -print -exec chmod o-w {} +
+find $(findmnt -rn -o TARGET -t ext4,ext3,xfs,btrfs,vfat) -xdev \
+    \( -path /sauvegardes -o -path /usr \) -prune \
+    -o -type f -perm -4000 -print -exec chmod u-s {} +
+
+etape "13. Services réseau inutiles (D2)"
+for unite in avahi-daemon.socket avahi-daemon.service cups-browsed.service; do
+    if systemctl cat "$unite" >/dev/null 2>&1; then
+        systemctl disable --now "$unite"
+        systemctl mask "$unite"
+    fi
+done
 
 admins="$(lignes_csv | awk -F';' '$3 == "admins" {print $1}' | paste -sd '|')"
 nouveaux="$(tail -n +"$((lignes_avant + 1))" "$FICHIER_MDP" 2>/dev/null | grep -E "^($admins):" || true)"
