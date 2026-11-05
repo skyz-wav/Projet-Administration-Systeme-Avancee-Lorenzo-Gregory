@@ -9,8 +9,11 @@ fi
 
 cd "$(dirname "$(readlink -f "$0")")"
 
-for f in comptes.csv creer_comptes.sh analyse_logs.sh \
-         config/nftables.conf config/journald.conf; do
+DISQUE="${DISQUE_SAUVEGARDE:-/dev/sdb}"
+
+for f in comptes.csv creer_comptes.sh analyse_logs.sh sauvegarde.sh \
+         config/nftables.conf config/journald.conf config/apt/20auto-upgrades \
+         config/systemd/sauvegarde.service config/systemd/sauvegarde.timer; do
     if [ ! -f "$f" ]; then
         echo "Erreur : $f introuvable dans $(pwd)." >&2
         exit 1
@@ -44,7 +47,7 @@ admins_avec_mdp() {
 etape "1. Paquets"
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    sudo acl openssh-server nftables fail2ban python3-systemd
+    sudo acl openssh-server nftables fail2ban python3-systemd unattended-upgrades rsync
 
 etape "2. Comptes, groupes, clés SSH et /srv (C1, C2)"
 FICHIER_MDP=/root/mots_de_passe_initiaux.txt
@@ -126,7 +129,7 @@ if ! nft -c -f config/nftables.conf; then
 fi
 install -m 644 -o root -g root config/nftables.conf /etc/nftables.conf
 systemctl enable nftables
-systemctl restart nftables
+systemctl reload-or-restart nftables
 
 etape "8. fail2ban (J1)"
 if ! compgen -G "config/fail2ban/jail.d/*.conf" >/dev/null; then
@@ -142,6 +145,45 @@ if ! fail2ban-client -t >/dev/null; then
 fi
 systemctl enable fail2ban
 systemctl restart fail2ban
+
+etape "9. Mises à jour de sécurité automatiques (D1)"
+install -m 644 -o root -g root config/apt/20auto-upgrades /etc/apt/apt.conf.d/20auto-upgrades
+systemctl enable --now apt-daily.timer apt-daily-upgrade.timer
+
+etape "10. Disque de sauvegarde (B1, B3)"
+if ! blkid -L sauvegardes >/dev/null; then
+    if [ ! -b "$DISQUE" ]; then
+        echo "Erreur : disque $DISQUE introuvable (précisez DISQUE_SAUVEGARDE=/dev/...)." >&2
+        exit 1
+    fi
+    if [ "$(lsblk -nro NAME "$DISQUE" | wc -l)" -gt 1 ] || blkid "$DISQUE" >/dev/null; then
+        echo "Erreur : $DISQUE contient déjà des données, il n'est PAS formaté." >&2
+        exit 1
+    fi
+    mkfs.ext4 -q -L sauvegardes "$DISQUE"
+fi
+install -d -m 750 -o root -g admins /sauvegardes
+if ! grep -q '^LABEL=sauvegardes ' /etc/fstab; then
+    echo "LABEL=sauvegardes /sauvegardes ext4 defaults,nofail 0 2" >> /etc/fstab
+    systemctl daemon-reload
+fi
+mountpoint -q /sauvegardes || mount /sauvegardes
+chown root:admins /sauvegardes
+chmod 750 /sauvegardes
+
+etape "11. Sauvegarde planifiée (B1, B2)"
+install -m 755 -o root -g root sauvegarde.sh /usr/local/sbin/sauvegarde.sh
+for f in config/systemd/sauvegarde.service config/systemd/sauvegarde.timer; do
+    install -m 644 -o root -g root "$f" "/etc/systemd/system/$(basename "$f")"
+done
+systemctl daemon-reload
+systemctl enable --now sauvegarde.timer
+systemctl start sauvegarde.service
+
+etape "12. Fichiers modifiables par tous (D3)"
+find $(findmnt -rn -o TARGET -t ext4,ext3,xfs,btrfs,vfat) -xdev \
+    \( -path /sauvegardes -o -path /tmp -o -path /var/tmp \) -prune \
+    -o -type f -perm -0002 -print -exec chmod o-w {} +
 
 admins="$(lignes_csv | awk -F';' '$3 == "admins" {print $1}' | paste -sd '|')"
 nouveaux="$(tail -n +"$((lignes_avant + 1))" "$FICHIER_MDP" 2>/dev/null | grep -E "^($admins):" || true)"
