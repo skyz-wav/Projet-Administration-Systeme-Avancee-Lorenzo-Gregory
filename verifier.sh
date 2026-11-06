@@ -84,7 +84,9 @@ test_C3() {
     controle oui C3 "le compte support ne peut lancer que analyse_logs.sh" \
         "sudo -l -U support | sed -n '/may run/,\$p' | tail -n +2 | grep -q analyse_logs.sh &&
          ! sudo -l -U support | sed -n '/may run/,\$p' | tail -n +2 | grep -v analyse_logs.sh | grep -q '[^[:space:]]'"
-    for login in $(csv | awk -F';' '$3 != "admins" && $1 != "support" {print $1}'); do
+    for login in $(getent passwd | awk -F: '$3 >= 1000 && $3 < 65534 {print $1}'); do
+        [ "$login" = support ] && continue
+        id -nG "$login" | tr ' ' '\n' | grep -qx admins && continue
         sudo -l -U "$login" 2>/dev/null | grep -q "not allowed" || autres+=" $login"
     done
     if [ -z "$autres" ]; then ok C3 "aucun autre compte n'a sudo"; else ko C3 "sudo autorisé pour :$autres"; fi
@@ -152,7 +154,79 @@ test_J4() {
         "! $script 5 $TMP/auth.log && $script 10 $TMP/auth.log"
 }
 
-for t in C1 C2 C3 C4 S1 S2 S3 S4 S5 J1 J2 J3 J4; do
+test_D1() {
+    controle oui D1 "mises à jour de sécurité automatiques" \
+        "dpkg-query -W -f='\${Status}' unattended-upgrades | grep -q 'install ok installed' &&
+         apt-config dump | grep -qx 'APT::Periodic::Unattended-Upgrade \"1\";' &&
+         systemctl is-enabled apt-daily-upgrade.timer"
+}
+
+test_D2() {
+    local ecoutes
+    ecoutes="$(ss -Htuln | awk '{
+        n = split($5, a, ":"); port = a[n]; adr = substr($5, 1, length($5) - length(port) - 1)
+        if (adr ~ /^(127\.|\[::1\])/) next
+        if ($1 == "tcp" && port == 22) next
+        if ($1 == "udp" && (port == 68 || port == 546)) next
+        print $1 "/" port
+    }' | sort -u | tr '\n' ' ')"
+    if [ -z "$ecoutes" ]; then ok D2 "seul SSH (et le client DHCP) écoute sur le réseau"; else ko D2 "écoutes réseau en trop : $ecoutes"; fi
+}
+
+fichiers_reels() {
+    find $(findmnt -rn -o TARGET -t ext4,ext3,xfs,btrfs,vfat) -xdev \
+        \( -path /sauvegardes -o -path /tmp -o -path /var/tmp \) -prune -o -type f "$@" -print 2>/dev/null
+}
+
+test_D3() {
+    controle oui D3 "aucun fichier modifiable par tous hors répertoires temporaires" \
+        "[ -z \"\$(fichiers_reels -perm -0002)\" ]"
+    controle oui D3 "fichiers SUID uniquement dans /usr et non modifiables ($(fichiers_reels -perm -4000 | wc -l) trouvés)" \
+        "! fichiers_reels -perm -4000 | grep -v '^/usr/' | grep -q . && [ -z \"\$(fichiers_reels -perm -4000 -perm /022)\" ]"
+}
+
+versions() { find /sauvegardes -mindepth 1 -maxdepth 1 -type d -name '20??-??-??_??????' 2>/dev/null | sort; }
+
+test_B1() {
+    local derniere avant n
+    derniere="$(versions | tail -n 1)"; avant="$(versions | tail -n 2 | head -n 1)"; n="$(versions | wc -l)"
+    controle oui B1 "sauvegarde de /srv et /etc sur un disque séparé" \
+        "mountpoint -q /sauvegardes && [ \"\$(findmnt -no SOURCE /sauvegardes)\" != \"\$(findmnt -no SOURCE /)\" ] &&
+         [ -n '$derniere' ] && [ -d '$derniere/srv' ] && [ -d '$derniere/etc' ]"
+    controle oui B1 "droits et ACL conservés dans la sauvegarde" \
+        "[ -n '$derniere' ] && getfacl -p '$derniere/srv/rh' | grep -q '^group:rh:rwx'"
+    if [ "$n" -lt 2 ]; then
+        ko B1 "sauvegarde incrémentale : il faut 2 versions, lancez 'sudo sauvegarde.sh'"
+    else
+        controle oui B1 "sauvegarde incrémentale (fichiers inchangés non recopiés)" \
+            "[ \"\$(stat -c %i '$avant/etc/hostname')\" = \"\$(stat -c %i '$derniere/etc/hostname')\" ]"
+    fi
+    controle oui B1 "au plus 7 versions conservées ($n présentes)" "[ $n -ge 1 ] && [ $n -le 7 ]"
+}
+
+test_B2() {
+    controle oui B2 "sauvegarde planifiée par un timer systemd" \
+        "systemctl is-enabled sauvegarde.timer && systemctl is-active sauvegarde.timer"
+    controle oui B2 "exécutions journalisées" "journalctl -t sauvegarde -q --no-pager | grep -q 'Fin de la sauvegarde'"
+}
+
+test_B3() {
+    local admin s
+    admin="$(membre admins)"; s="$(membre stagiaire)"
+    controle oui B3 "/sauvegardes appartient à root:admins en 750" \
+        "[ \"\$(stat -c '%U:%G %a' /sauvegardes)\" = 'root:admins 750' ]"
+    controle oui B3 "un admin accède aux sauvegardes" "lire $admin /sauvegardes"
+    controle non B3 "un autre utilisateur n'accède pas aux sauvegardes" "lire $s /sauvegardes"
+}
+
+test_B4() {
+    local derniere
+    derniere="$(versions | tail -n 1)"
+    controle oui B4 "restauration d'un fichier depuis la dernière version" \
+        "[ -n '$derniere' ] && rsync -aAX '$derniere/etc/hostname' '$TMP/' && cmp '$TMP/hostname' /etc/hostname"
+}
+
+for t in C1 C2 C3 C4 S1 S2 S3 S4 S5 J1 J2 J3 J4 D1 D2 D3 B1 B2 B3 B4; do
     "test_$t"
 done
 
